@@ -27,7 +27,21 @@ github.com.		24	IN	A	13.250.177.223
 ;; MSG SIZE  rcvd: 76
 ```
 
+## Testing
+Using `queryperf` from bind9.
+
+```sh
+cd queryperf
+sh configure
+make
+```
+
+```sh
+./queryperf [-d datafile] [-s server_addr] [-p port] [-q num_queries]
+```
+
 ## Copyright
 
 * 2019, Hao Guan
 * 2018, Vincent Michel
+* bind9 Team
