@@ -29,5 +29,5 @@ github.com.		24	IN	A	13.250.177.223
 
 ## Copyright
 
-2019, Hao Guan
-2018, Vincent Michel
+* 2019, Hao Guan
+* 2018, Vincent Michel
