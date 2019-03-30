@@ -1,0 +1,10 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__
+
+# Cache
+cache.gz
+

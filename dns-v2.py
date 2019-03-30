@@ -1,18 +1,21 @@
-from socket import *
 import time
+import gzip
+import pickle
+import logging
+import asyncio
+from aioudp import open_local_endpoint, open_remote_endpoint
 
 SERVER_ADDR = '0.0.0.0'
 SERVER_PORT = 5300
 
-# Upsteam Address, use SUSTech Nameserver 2
-UPSTREAM_ADDR = 'ns2.sustc.edu.cn'
+# Upsteam Address, use DNSPod
+UPSTREAM_ADDR = '119.29.29.29'
 UPSTREAM_PORT = 53
 
 # Duration to cleanup caches
 CACHE_TTL = 1800
 
 caches = []
-
 
 # Query without EDNS
 class SimplifiedQuery(object):
@@ -104,28 +107,51 @@ class DNSRecord(SimplifiedQuery):
         return False
 
 
-def query_upstream(_query) -> bytes:
-    client_socket.sendto(_query.simple_data, (UPSTREAM_ADDR, UPSTREAM_PORT))
-    _response, server_address = client_socket.recvfrom(2048)
+async def query_upstream(_query) -> bytes:
+    remote = await open_remote_endpoint(UPSTREAM_ADDR, UPSTREAM_PORT)
+    remote.send(_query.simple_data)
+    _response = await remote.receive()
     return _response
 
+def loadCache() -> list:
+    try:
+        fp =  gzip.open('cache.gz', 'rb')
+        caches = pickle.load(fp)
+        fp.close()
+        print('Cache file restored')
+    except:
+        logging.warning('No caches')
+        caches = []
+    return caches
 
-if __name__ == '__main__':
+def saveCache(caches: list):
+    try:
+        fp = gzip.open('cache.gz', 'wb')
+        caches = pickle.dump(caches, fp)
+        fp.close()
+        print('Dump current cache into file')
+    except:
+        logging.warning('Dumpping cache failed')
+
+async def main():
     t_start = time.time()
-    server_socket = socket(AF_INET, SOCK_DGRAM)
-    server_socket.bind((SERVER_ADDR, SERVER_PORT))
-    print('The server is ready at {}:{}'.format(SERVER_ADDR, SERVER_PORT))
 
-    client_socket = socket(AF_INET, SOCK_DGRAM)
+    caches = loadCache()
+
+    local = await open_local_endpoint(SERVER_ADDR, SERVER_PORT)
+
+    print('The server is ready at {}:{}'.format(SERVER_ADDR, SERVER_PORT))
 
     while True:
         # Cleanup outdated, unpopular cache
+        # Dump current cache to file
         if time.time() - t_start >= CACHE_TTL:
             for c in caches:
                 if c.revoked():
                     caches.remove(c)
+            saveCache(caches)
 
-        message, client_address = server_socket.recvfrom(2048)
+        message, client_address = await local.receive()
         query = SimplifiedQuery(message)
         try:
             cache = caches[caches.index(query)]
@@ -133,7 +159,11 @@ if __name__ == '__main__':
             response = cache.get_response(query)
         except ValueError:
             # No cached record matched, send query to the upstream server
-            response = query_upstream(query)
+            response = await query_upstream(query)
             # Add the response to caches
             caches.append(DNSRecord(query, response))
-        server_socket.sendto(response, client_address)
+        # server_socket.sendto(response, client_address)
+        local.send(response, client_address)
+
+if __name__ == '__main__':
+    asyncio.run(main())
